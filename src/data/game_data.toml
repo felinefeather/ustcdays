@@ -1,0 +1,72 @@
+[[player]]
+name = "health"
+max = 100
+min = 0
+default = 100
+over_max = 85
+under_min = 85
+over_max_desc = "你的健康状况非常好。"
+under_min_desc = "你的健康状况非常糟糕。"
+[[player]]
+name = "energy"
+max = 100
+min = 0
+default = 100
+over_max = 100
+under_min = 0
+over_max_desc = "你的精力充沛。"
+under_min_desc = "你感到非常疲惫。" 
+
+[[maps]]
+name = "Town"
+connections = [
+    { to = "Forest", time = 10 },
+    { to = "Castle", time = 20 }
+]
+
+[[maps]]
+name = "Forest"
+connections = [
+    { to = "Town", time = 10 }
+]
+
+[[maps]]
+name = "Castle"
+connections = [
+    { to = "Forest", time = 0}
+]
+
+[[events]]
+name = "MorningRoutine"
+priority = 1
+force = false
+conditions = [
+    { type = "Time", start = "06:00", end = "08:00", days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], times = ["07:00"] },
+    { type = "Location", locations = ["Town"] }
+]
+segments = [
+    { name = "start", text = "你在家中醒来。", options = [
+        { text = "起床", condition = [], jump_to = "awake", modifications = { "energy"= -10 } }
+    ]}
+]
+
+#
+
+[[events]]
+stuck_moving = true
+name = "戰鬥！爽！"
+priority = 114514
+force = true
+conditions = [
+    { type = "Location", locations = ["Castle"] }
+]
+segments = [
+    { name = "start", text = "紧张刺激的战斗要开始力！", options = [
+        { text = "ttk!", jump_to = "寄了", modifications = { "health"= -10}}
+    ] },
+    { name = "寄了", text = "怎么办劳大，我们打输了", options = [
+        { text = "投降喵QAQ", condition = [] },
+        { text = "投降喵QAQ", condition = [] },
+        { text = "投降喵QAQ", condition = [] }
+    ] }
+]
