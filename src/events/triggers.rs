@@ -8,18 +8,19 @@ use crate::systems::time_system::TimeSystem;
 
 use super::events::EventSystem;
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TriggerSystem {
     pub registed_event: HashMap<Trigger, Vec<String>>,
 }
 
-#[derive(Hash, Clone, PartialEq, Eq, Debug, Deserialize)]
+#[derive(Hash, Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum Trigger {
     Reached(String),
     Stay(String),
 
+    Always,
     Custom(String),
 }
 

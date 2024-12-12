@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] use frontend::{FromFrontend, ToFrontend};
 // hide console window on Windows in release
-use game::{Game, GameDataSource};
+use game::{Game, DataSource};
 use eframe::egui;
 use egui::FontDefinitions;
 use systems::asset_system::ImageData;
@@ -28,6 +28,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            cc.egui_ctx.set_theme(egui::Theme::Dark);
             cc.egui_ctx.set_fonts({
                 let mut font = FontDefinitions::default();
                 let font_data = egui::FontData::from_static(include_bytes!(
@@ -59,7 +60,7 @@ struct Persistence {
 impl Default for Persistence {
     fn default() -> Self {
         Self { avatar: Some(
-            ImageData { size: Some((100.,100.)), position: (0.,0.), path: r#"file://C:\Users\felin\ustcdays\assets\untitled.png"#.into() }
+            ImageData { size: Some((100.,100.)), position: (0.,0.), path: r#"file://./assets/untitled.png"#.into() }
         ), deco: vec![] }
     }
 }
@@ -90,8 +91,8 @@ impl Default for MainApp {
         let (sf, rf) = std::sync::mpsc::channel();
         thread::spawn(|| {
             Game::new(
-                GameDataSource::Path(
-                    r#"C:\Users\felin\ustcdays\src\data\game_data.toml"#.into(),
+                DataSource::Path(
+                    r#"./src/data/game_data.toml"#.into(),
                 ), (sf, ru),
             )
             .unwrap().run();
@@ -136,6 +137,7 @@ impl eframe::App for MainApp {
                 for (name, max, cur) in &self.backend.cache.player_attribute {
                     ui.add(egui::ProgressBar::new(*cur as f32 / *max as f32))
                         .labelled_by(ui.label(name).id);
+                    println!("{cur}");
                 }
             });
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -143,8 +145,9 @@ impl eframe::App for MainApp {
             ui.label(self.backend.cache.main_area.clone());
 
             let options = self.backend.cache.option_area.clone();
-            for (id, opt) in options.into_iter().enumerate() {
-                if ui.button(opt).clicked() {
+            for (id, (opt_name,enabled)) in options.into_iter().enumerate() {
+                let button = egui::Button::new(opt_name);
+                if ui.add_enabled(enabled, button).clicked() {
                     self.backend.send(FromFrontend::Choice(id))
                         .unwrap_or_else(|_| panic!("failed to send the selection to the backend"));
                     break;

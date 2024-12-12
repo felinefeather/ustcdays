@@ -1,9 +1,9 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::events::triggers::Trigger;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Attribute {
     pub name: String,
     pub max: i32,
@@ -24,12 +24,13 @@ pub struct Attribute {
     pub invisible: bool,
 }
 
+#[derive(Serialize,Deserialize,Default)]
 pub struct Player {
     pub attributes: HashMap<String, i32>,
     pub attribute_defs: HashMap<String, Attribute>,
 
     pub items: HashMap<String,(toml::Value,usize)>,
-    pub game_time: chrono::NaiveDateTime,
+    pub game_time: String,
     pub game_map: String,
     pub trigger: HashSet<Trigger>,
 
@@ -50,7 +51,7 @@ impl Player {
             attribute_defs: defs_map,
             items: HashMap::new(),
             game_time: chrono::NaiveDateTime::parse_from_str("2024-01-01 00:00", "%Y-%m-%d %H:%M")
-                .unwrap(),
+                .unwrap().to_string(),
             game_map: "Town".to_string(),
 
             trigger: HashSet::new(),

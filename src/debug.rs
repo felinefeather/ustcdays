@@ -2,7 +2,7 @@
 
 use egui::Context;
 
-use crate::{frontend::{DebugFromFrontend, DebugSign, FromFrontend}, game::GameDataSource, MainApp};
+use crate::{frontend::{DebugFromFrontend, DebugSign, FromFrontend}, game::DataSource, MainApp};
 
 pub fn debug_window(app: &mut MainApp, ctx: &Context) {
     egui::Window::new("Debug").show(ctx, |ui| {
@@ -10,21 +10,21 @@ pub fn debug_window(app: &mut MainApp, ctx: &Context) {
         if ui.button("as path").clicked() {
             app.backend.sender.send(FromFrontend::Debug(
                 DebugFromFrontend { sign: DebugSign::ReloadData(
-                    GameDataSource::Path(app.debug_cache.path_str.clone().into())
+                    DataSource::Path(app.debug_cache.path_str.clone().into())
                 ) }
             )).unwrap_or_else(|_| panic!("failed to send the selection to the backend"));
         }
         if ui.button("as raw").clicked() {
             app.backend.sender.send(FromFrontend::Debug(
                 DebugFromFrontend { sign: DebugSign::ReloadData(
-                    GameDataSource::Raw(app.debug_cache.path_str.clone().into())
+                    DataSource::Raw(app.debug_cache.path_str.clone().into())
                 ) }
             )).unwrap_or_else(|_| panic!("failed to send the selection to the backend"));
         }
         if ui.button("as default").clicked() {
             app.backend.sender.send(FromFrontend::Debug(
                 DebugFromFrontend { sign: DebugSign::ReloadData(
-                    GameDataSource::None
+                    DataSource::None
                 ) }
             )).unwrap_or_else(|_| panic!("failed to send the selection to the backend"));
         }

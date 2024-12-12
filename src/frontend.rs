@@ -4,16 +4,15 @@ use std::{
 };
 
 use crate::{
-    game::{GameDataSource, GameErr},
-    systems::asset_system::ImageData,
-    player::Attribute,
+    game::{DataSource, GameData, GameErr}, player::Attribute, systems::asset_system::ImageData
 };
 
 // frontend.rs
 #[derive(Clone, Default, Debug)]
 pub struct ToFrontend {
     pub main_area: String,
-    pub option_area: Vec<String>,
+    pub option_area: Vec<(String,bool)>,
+    pub option_display_disabled: bool,
     pub player_status: Vec<String>,
 
     pub player_attribute: Vec<(String, i32, i32)>,
@@ -57,15 +56,22 @@ pub struct DebugFromFrontend {
 
 #[derive(Clone, Default, Debug)]
 pub enum DebugSign {
-    ReloadData(GameDataSource),
+    ReloadData(DataSource<GameData>),
     SetAttribute(String, i32),
     #[default]
     None,
 }
 
 impl Frontend {
-    pub fn display_options(&mut self, options: &[String]) -> Result<usize, GameErr> {
-        self.cache.display_options(options);
+    pub fn display_options(&mut self, options: &[(String,bool)], display_disabled: bool) -> Result<usize, GameErr> {
+        self.cache.display_options(options,display_disabled);
+        self.sender.send(self.cache.clone_and_clear())?;
+        Ok(self.receiver.recv()?.into_choice()?)
+    }
+
+    pub fn display_all_options(&mut self, options: &[String]) -> Result<usize, GameErr> {
+        self.cache.display_options(
+            &options.iter().map(|s|(s.clone(),false)).collect::<Vec<_>>(),false);
         self.sender.send(self.cache.clone_and_clear())?;
         Ok(self.receiver.recv()?.into_choice()?)
     }
@@ -85,10 +91,11 @@ impl ToFrontend {
     /// 显示选项并获取玩家的选择
     /// 返回玩家选择的选项索引
     /// Blocking => ?
-    pub fn display_options(&mut self, options: &[String]) {
+    pub fn display_options(&mut self, options: &[(String,bool)], display_disabled: bool) {
         options
             .iter()
             .for_each(|opt| self.option_area.push(opt.clone()));
+        self.option_display_disabled = display_disabled;
     }
 
     /// 显示玩家属性的过高或过低描述

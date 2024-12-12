@@ -1,4 +1,3 @@
-use crate::debug;
 use crate::frontend::Frontend;
 use crate::game;
 use crate::player::Player;
@@ -35,9 +34,9 @@ pub struct EventOption {
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum AvatarSet {
-    Main(Vec<String>),
-    Deco(Vec<String>),
-    MainKeepingDeco(Vec<String>),
+    Main(String),
+    Deco(String),
+    MainKeepingDeco(String),
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -50,6 +49,8 @@ pub struct EventSegment {
     pub silent: bool,
     #[serde(default)]
     pub options: Vec<EventOption>,
+    #[serde(default)]
+    pub hide_disabled_options: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -166,12 +167,21 @@ impl EventSystem {
         }
 
         // 显示选项并获取选择
-        let options: Vec<String> = segment.options.iter().map(|opt| opt.text.clone()).collect();
+
+        // hide_disabled_options
+        // 实现的不好！！！
+        let options: Vec<(String,bool)> = segment
+            .options.iter().map(|opt| (
+                    opt.text.clone(),
+                    if let Some(cond) = &opt.condition {
+                        cond.iter().all(|cond| cond.is_met(time_system, map_system, player))
+                    } else { true }
+                )).collect();
         let mut timer = 0;
         let selected_option = loop {
             let choice = if segment.silent {
                 timer += 1; timer - 1
-            } else { frontend.display_options(&options)? };
+            } else { frontend.display_options(&options,segment.hide_disabled_options)? };
 
             let Some(selected_option) = segment.options.get(choice) else {
                 if !segment.silent { continue; }
@@ -227,9 +237,9 @@ impl EventSystem {
 
         if let Some(ref avatar_set) = selected_option.avatar_set {
             match avatar_set {
-                AvatarSet::Main(vec) => frontend.cache.change_avatar(asset_system.avatar[vec].clone()),
-                AvatarSet::Deco(vec) => frontend.cache.add_avatar_deco(asset_system.avatar[vec].clone()),
-                AvatarSet::MainKeepingDeco(vec) => frontend.cache.change_avatar_keeping_deco(asset_system.avatar[vec].clone()),
+                AvatarSet::Main(str) => frontend.cache.change_avatar(asset_system.avatar[str].clone()),
+                AvatarSet::Deco(str) => frontend.cache.add_avatar_deco(asset_system.avatar_deco[str].clone()),
+                AvatarSet::MainKeepingDeco(str) => frontend.cache.change_avatar_keeping_deco(asset_system.avatar[str].clone()),
             }
         }
 

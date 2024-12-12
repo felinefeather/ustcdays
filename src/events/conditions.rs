@@ -57,6 +57,8 @@ pub enum Condition {
     Location(LocationCondition),
     PlayerAttribute(PlayerAttributeCondition),
     PlayerItem(PlayerItemContition),
+
+    RandomCondition(f64),
     // 可以扩展更多条件类型
 
     // 逻辑条件
@@ -119,6 +121,9 @@ impl Condition {
             },
             Condition::Xor(vec) => {
                 vec.iter().fold(false, |fold,cond| fold^cond.is_met(time_system, map_system, player))
+            },
+            Condition::RandomCondition(prop) => {
+                rand::random::<f64>()  < *prop
             },
         }
     }

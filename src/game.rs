@@ -1,7 +1,5 @@
 use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
+    collections::HashMap, path::PathBuf, str::FromStr, sync::mpsc::{Receiver, Sender}
 };
 
 use crate::{
@@ -16,6 +14,7 @@ use crate::{
     },
 };
 use anyhow::Result;
+use chrono::NaiveDateTime;
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -26,7 +25,7 @@ pub struct GameData {
     #[serde(default)]
     pub assets: AssetSystem,
     #[serde(default)]
-    pub trigger: HashMap<Trigger, Vec<String>>,
+    pub trigger: Vec<(Trigger, Vec<String>)>,
 }
 
 pub struct Game {
@@ -42,22 +41,22 @@ pub struct Game {
 }
 
 #[derive(Clone, Default, Debug)]
-pub enum GameDataSource {
+pub enum DataSource<T> {
     Path(PathBuf),
     Raw(String),
-    Inbuilt(Box<GameData>),
+    Inbuilt(Box<T>),
     #[default]
     None,
 }
 
-impl GameDataSource {
-    fn into_gamedata(self) -> Result<GameData> {
+impl<T: serde::de::DeserializeOwned + Default> DataSource<T> {
+    fn into_data(self) -> Result<T> {
         let str = match self {
-            GameDataSource::Path(path_buf) => std::fs::read_to_string(path_buf)?,
-            GameDataSource::Raw(str) => str,
-            GameDataSource::Inbuilt(gamedata) => return Ok(*gamedata),
-            GameDataSource::None => 
-                return GameDataSource::Inbuilt(Box::new(GameData::default())).into_gamedata(),
+            DataSource::Path(path_buf) => std::fs::read_to_string(path_buf)?,
+            DataSource::Raw(str) => str,
+            DataSource::Inbuilt(gamedata) => return Ok(*gamedata),
+            DataSource::None => 
+                return DataSource::Inbuilt(Box::new(T::default())).into_data(),
         };
         Ok(toml::from_str(&str)?)
     }
@@ -84,11 +83,23 @@ impl From<DebugFromFrontend> for GameErr {
 }
 
 impl Game {
+    pub fn new_with_player(
+        source: DataSource<GameData>,
+        player_source: DataSource<Player>,
+        frontend: (Sender<ToFrontend>, Receiver<FromFrontend>),
+    )-> Result<Self> {
+        let mut ret = Self::new(source, frontend)?;
+        ret.player = player_source.into_data()?;
+        ret.time_system.current_time = NaiveDateTime::from_str(&ret.player.game_time)?;
+        ret.map_system.current_location = ret.player.game_map.clone();
+        Ok(ret)
+    }
+
     pub fn new(
-        source: GameDataSource,
+        source: DataSource<GameData>,
         frontend: (Sender<ToFrontend>, Receiver<FromFrontend>),
     ) -> Result<Self> {
-        let data = source.into_gamedata()?;
+        let data = source.into_data()?;
 
         Ok(Game {
             asset_system: data.assets,
@@ -97,7 +108,13 @@ impl Game {
             event_system: EventSystem::new(&data.events),
             player: Player::new(&data.player),
             trigger_system: TriggerSystem {
-                registed_event: data.trigger.clone(),
+                registed_event: {
+                    data.trigger.iter()
+                        .fold(HashMap::new(), |mut map,(key,value)| {
+                            map.insert(key.clone(), value.clone());
+                            map
+                    })
+                },
             },
             current_event_and_segment: None,
 
@@ -151,7 +168,7 @@ impl Game {
             // 更新时间系统
             self.time_system.update();
 
-            self.player.game_time = self.time_system.current_time;
+            self.player.game_time = self.time_system.current_time.to_string();
             self.player.game_map = self.map_system.get_current_location().to_string();
 
             // 触发事件
@@ -161,7 +178,10 @@ impl Game {
                 &self.map_system,
                 &self.player,
                 &mut self.event_system,
-            )?;
+            )?; 
+            
+            self.player.trigger.clear();
+            self.player.trigger.insert(Trigger::Always);
 
             // 显示玩家状态
             let status = self.player.get_over_under_descriptions();
@@ -184,7 +204,7 @@ impl Game {
                 self.frontend.cache.display_text("你想要移动到其他地点吗？");
                 let choice = self
                     .frontend
-                    .display_options(&vec!["是".to_string(), "否".to_string()])?;
+                    .display_options(&vec![("是".to_string(),true), ("否".to_string(),true)],false)?;
                 if choice == 0 {
                     // 显示可移动的地图
                     let current_map = self.map_system.get_current_location();
@@ -195,11 +215,11 @@ impl Game {
                         .unwrap()
                         .connections
                         .clone();
-                    let options: Vec<String> = connections
+                    let options: Vec<(String,bool)> = connections
                         .iter()
-                        .map(|c| format!("{} (需要 {} 分钟)", c.to, c.time))
+                        .map(|c| (format!("{} (需要 {} 分钟)", c.to, c.time),true))
                         .collect();
-                    let map_choice = self.frontend.display_options(&options)?;
+                    let map_choice = self.frontend.display_options(&options,false)?;
                     if map_choice < connections.len() {
                         let destination = &connections[map_choice].to;
                         match self.map_system.travel(destination, &mut self.time_system) {
