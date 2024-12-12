@@ -49,8 +49,12 @@ pub struct ItemCheck {
 //     Equals(toml::Value),
 // }
 
-
 #[derive(Debug, Deserialize, Clone)]
+pub struct ConditionGroup {
+    pub conds: Vec<Condition>
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
 #[serde(tag = "type")]
 pub enum Condition {
     Time(TimeCondition),
@@ -62,9 +66,13 @@ pub enum Condition {
     // 可以扩展更多条件类型
 
     // 逻辑条件
-    And(Vec<Condition>),
-    Or(Vec<Condition>),
-    Xor(Vec<Condition>),
+    And(ConditionGroup),
+    Or(ConditionGroup),
+    Xor(ConditionGroup),
+
+    False,
+    #[default]
+    True,
 }
 
 impl Condition {
@@ -114,17 +122,19 @@ impl Condition {
                 true
             },
             Condition::And(vec) => {
-                vec.iter().all(|cond| cond.is_met(time_system, map_system, player))
+                vec.conds.iter().all(|cond| cond.is_met(time_system, map_system, player))
             },
             Condition::Or(vec) => {
-                vec.iter().any(|cond| cond.is_met(time_system, map_system, player))
+                vec.conds.iter().any(|cond| cond.is_met(time_system, map_system, player))
             },
             Condition::Xor(vec) => {
-                vec.iter().fold(false, |fold,cond| fold^cond.is_met(time_system, map_system, player))
+                vec.conds.iter().fold(false, |fold,cond| fold^cond.is_met(time_system, map_system, player))
             },
             Condition::RandomCondition(prop) => {
                 rand::random::<f64>()  < *prop
             },
+            Condition::False => false,
+            Condition::True => true,
         }
     }
 }

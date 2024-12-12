@@ -92,7 +92,7 @@ impl Default for MainApp {
         thread::spawn(|| {
             Game::new(
                 DataSource::Path(
-                    r#"./src/data/game_data.toml"#.into(),
+                    r#"./src/data/example.toml"#.into(),
                 ), (sf, ru),
             )
             .unwrap().run();
@@ -134,18 +134,18 @@ impl eframe::App for MainApp {
                     });
                 }
                 ui.add_space(16.);
-                for (name, max, cur) in &self.backend.cache.player_attribute {
-                    ui.add(egui::ProgressBar::new(*cur as f32 / *max as f32))
-                        .labelled_by(ui.label(name).id);
-                    println!("{cur}");
+                for (name, cur, max) in 
+                    &self.backend.cache.player_attribute.clone().unwrap_or(vec![]) {
+                        ui.add(egui::ProgressBar::new((*cur as f32) / (*max as f32)))
+                            .labelled_by(ui.label(name).id);
                 }
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("今日日程");
-            ui.label(self.backend.cache.main_area.clone());
+            ui.label(self.backend.cache.main_area.clone().unwrap_or_default());
 
             let options = self.backend.cache.option_area.clone();
-            for (id, (opt_name,enabled)) in options.into_iter().enumerate() {
+            for (id, (opt_name,enabled)) in options.unwrap_or_default().into_iter().enumerate() {
                 let button = egui::Button::new(opt_name);
                 if ui.add_enabled(enabled, button).clicked() {
                     self.backend.send(FromFrontend::Choice(id))
@@ -160,7 +160,9 @@ impl eframe::App for MainApp {
 impl MainApp {
     pub fn try_frontend_update(&mut self) {
         if let Ok(f) = self.backend.receiver.try_recv() {
-            self.backend.cache = f;
+            self.backend.cache.merge(f);
+            println!("{}",self.backend.cache.player_attribute.clone().unwrap()[0].1);
+            println!("{}",self.backend.cache.player_attribute.clone().unwrap()[1].1);
             self.update_persistence();
         }
     }
@@ -168,8 +170,9 @@ impl MainApp {
     pub fn update_persistence(&mut self) {
         if let Some(data) = &self.backend.cache.avatar_image.0 {
             self.persistence.avatar = Some(data.clone());
-            println!("re-writed");
         }
-        self.persistence.deco = self.backend.cache.avatar_image.1.clone();
+        if let Some(deco) = &self.backend.cache.avatar_image.1 {
+            self.persistence.deco = deco.clone();
+        }
     }
 }

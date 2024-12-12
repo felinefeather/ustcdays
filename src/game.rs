@@ -25,7 +25,7 @@ pub struct GameData {
     #[serde(default)]
     pub assets: AssetSystem,
     #[serde(default)]
-    pub trigger: Vec<(Trigger, Vec<String>)>,
+    pub trigger: Vec<HashMap<String,Trigger>>,
 }
 
 pub struct Game {
@@ -109,11 +109,16 @@ impl Game {
             player: Player::new(&data.player),
             trigger_system: TriggerSystem {
                 registed_event: {
-                    data.trigger.iter()
-                        .fold(HashMap::new(), |mut map,(key,value)| {
-                            map.insert(key.clone(), value.clone());
+                    let ret = data.trigger.iter()
+                        .fold(HashMap::new(), |mut map: HashMap<Trigger, Vec<String>>,value| {
+                            for (key,value) in value {
+                                if let Some(map) = map.get_mut(value) {
+                                    map.push(key.clone());
+                                } else { map.insert(value.clone(), vec![key.clone()]);}
+                            }
                             map
-                    })
+                    });
+                    ret
                 },
             },
             current_event_and_segment: None,
@@ -124,6 +129,24 @@ impl Game {
                 receiver: frontend.1,
             },
         })
+    }
+
+    pub fn main_loop(&mut self) {
+        loop {
+            let Self { 
+                time_system,
+                map_system, 
+                asset_system, 
+                event_system, 
+                player, 
+                trigger_system, 
+                current_event_and_segment, 
+                frontend 
+            } = &mut self;
+            trigger_system.add(player,time_system,map_system);
+            event_system.try_insert(trigger_system.pick_event());
+            event_system.run(player,asset_system,frontend);
+        }
     }
 
     pub fn run(mut self) {
@@ -165,12 +188,6 @@ impl Game {
                 return Err(dbg.into());
             }
 
-            // 更新时间系统
-            self.time_system.update();
-
-            self.player.game_time = self.time_system.current_time.to_string();
-            self.player.game_map = self.map_system.get_current_location().to_string();
-
             // 触发事件
             self.trigger_system.check(
                 &self.player.trigger,
@@ -183,12 +200,6 @@ impl Game {
             self.player.trigger.clear();
             self.player.trigger.insert(Trigger::Always);
 
-            // 显示玩家状态
-            let status = self.player.get_over_under_descriptions();
-            self.frontend.cache.display_player_status(&status);
-            self.frontend.cache
-                .display_player_attributes(&self.player.attributes, &self.player.attribute_defs);
-
             // 处理事件
             self.event_system.process_events(
                 &mut self.current_event_and_segment,
@@ -199,48 +210,60 @@ impl Game {
                 &mut self.frontend,
             )?;
 
-            // 示例：玩家选择是否移动地图
-            if !self.player.stuck_in_event {
-                self.frontend.cache.display_text("你想要移动到其他地点吗？");
-                let choice = self
-                    .frontend
-                    .display_options(&vec![("是".to_string(),true), ("否".to_string(),true)],false)?;
-                if choice == 0 {
-                    // 显示可移动的地图
-                    let current_map = self.map_system.get_current_location();
-                    let connections = self
-                        .map_system
-                        .maps
-                        .get(current_map)
-                        .unwrap()
-                        .connections
-                        .clone();
-                    let options: Vec<(String,bool)> = connections
-                        .iter()
-                        .map(|c| (format!("{} (需要 {} 分钟)", c.to, c.time),true))
-                        .collect();
-                    let map_choice = self.frontend.display_options(&options,false)?;
-                    if map_choice < connections.len() {
-                        let destination = &connections[map_choice].to;
-                        match self.map_system.travel(destination, &mut self.time_system) {
-                            Ok(_) => {
-                                self.player
-                                    .trigger
-                                    .insert(Trigger::Reached(destination.clone()));
-                                self.frontend
-                                    .cache
-                                    .display_text(&format!("你已移动到 {}", destination));
-                            }
-                            Err(e) => self.frontend.cache.display_error(&e),
-                        }
-                    }
-                }
-            }
+            // 更新玩家状态
+            self.player.game_time = self.time_system.current_time.to_string();
+            self.player.game_map = self.map_system.get_current_location().to_string();
+            let status = self.player.get_over_under_descriptions();
+            self.frontend.cache.display_player_status(&status);
+            self.frontend.cache
+                .display_player_attributes(&self.player.attributes.val, &self.player.attribute_defs);
 
-            // 添加退出条件，例如玩家输入特定命令
-            // 例如，每1000回合自动退出
+            // 示例：玩家选择是否移动地图\
+            // 把这个用 event 重写！
 
-            // 被我删了——这是我唯一写过的注释
+            // if !self.player.stuck_in_event {
+            //     self.frontend.cache.display_text("你想要移动到其他地点吗？");
+            //     let choice = self
+            //         .frontend
+            //         .display_options(&vec![("是".to_string(),true), ("否".to_string(),true)],false)?;
+            //     if choice == 0 {
+            //         // 显示可移动的地图
+            //         let current_map = self.map_system.get_current_location();
+            //         let connections = self
+            //             .map_system
+            //             .maps
+            //             .get(current_map)
+            //             .unwrap()
+            //             .connections
+            //             .clone();
+
+            //         let options: Vec<(String,bool)> = connections
+            //             .iter()
+            //             .map(|c| (
+            //                 format!("{} (需要 {} 分钟)", c.optional_name.clone().unwrap_or(c.to.clone()),c.time ),
+            //                 c.condition.is_none() || c.condition.as_ref().unwrap().is_met(&self.time_system, &self.map_system, &self.player)
+            //             )).collect();
+
+            //         let map_choice = self.frontend.display_options(&options,false)?;
+
+            //         // 确认目的地，开始尝试移动
+            //         let destination = &connections[map_choice].to;
+            //         match self.map_system.travel(destination, &mut self.time_system) {
+            //             Ok(_) => {
+            //                 self.player
+            //                     .trigger
+            //                     .insert(Trigger::Reached(destination.clone()));
+            //                 self.frontend
+            //                     .cache
+            //                     .display_text(
+            //                         self.map_system.maps[destination].description.clone()
+            //                             .unwrap_or("已抵达".into()).as_str());
+            //             }
+            //             Err(e) => self.frontend.cache.display_error(&e),
+            //         }
+                    
+            //     }
+            // }
         }
     }
 }

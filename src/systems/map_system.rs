@@ -1,15 +1,21 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::events::conditions::Condition;
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Connection {
     pub to: String,
     pub time: u32, // travel time in minutes
+    pub optional_name: Option<String>,
+    pub condition: Option<Condition>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Map {
     pub name: String,
+    pub displayed_name: Option<String>,
+    pub description: Option<String>,
     pub connections: Vec<Connection>,
 }
 

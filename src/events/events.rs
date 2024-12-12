@@ -17,7 +17,7 @@ use std::collections::HashMap;
 pub struct EventOption {
     pub text: String,
     #[serde(default)]
-    pub condition: Option<Vec<Condition>>,
+    pub condition: Option<Condition>,
     #[serde(default)]
     pub jump_to: Option<String>,
     #[serde(default)]
@@ -58,7 +58,8 @@ pub struct EventData {
     pub name: String,
     pub priority: u32,
     pub force: bool,
-    pub conditions: Vec<Condition>, // 修改为 Vec<Condition>
+    #[serde(default)]
+    pub condition: Condition, // 修改为 Condition
     pub segments: Vec<EventSegment>,
 
     #[serde(default)]
@@ -127,7 +128,7 @@ impl EventSystem {
         if current_event_and_segment.is_none() {
             *current_event_and_segment = self
                 .registered_events
-                .peek()
+                .pop()
                 .map(|event| {
                     if event.force || self.should_trigger_event(&event, player) {
                         Some((event.name.clone(), None))
@@ -174,7 +175,7 @@ impl EventSystem {
             .options.iter().map(|opt| (
                     opt.text.clone(),
                     if let Some(cond) = &opt.condition {
-                        cond.iter().all(|cond| cond.is_met(time_system, map_system, player))
+                        cond.is_met(time_system, map_system, player)
                     } else { true }
                 )).collect();
         let mut timer = 0;
@@ -189,17 +190,10 @@ impl EventSystem {
             };
 
             // 检查选项条件
-            let Some(ref conditions) = selected_option.condition else {
+            let Some(ref condition) = selected_option.condition else {
                 break selected_option;
             };
-            let mut conditions_met = true;
-            for condition in conditions {
-                if !condition.is_met(time_system, map_system, player) {
-                    conditions_met = false;
-                    break;
-                }
-            }
-            if !conditions_met {
+            if !condition.is_met(time_system, map_system, player) {
                 if !segment.silent { frontend.cache.display_error("选项条件不满足！");}
                 continue;
             }

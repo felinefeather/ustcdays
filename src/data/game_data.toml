@@ -1,8 +1,5 @@
 trigger = [
-    [
-        { Reached = "Castle"},
-        [ "戰鬥！爽！" ]
-    ]
+    {"戰鬥！爽！" = { t = "Reached", c = "Castle"}},
 ]
 
 [[player]]
@@ -52,13 +49,14 @@ connections = [
 name = "MorningRoutine"
 priority = 1
 force = false
-conditions = [
+condition = { type = "And", conds = [
     { type = "Time", start = "06:00", end = "08:00", days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], times = ["07:00"] },
     { type = "Location", locations = ["Town"] }
-]
+] }
+    
 segments = [
     { name = "start", text = "你在家中醒来。", options = [
-        { text = "起床", condition = [], jump_to = "awake", modifications = { "energy"= -10 }}
+        { text = "起床", jump_to = "awake", modifications = { "energy"= -10 }}
     ]}
 ]
 
@@ -67,16 +65,13 @@ stuck_moving = true
 name = "戰鬥！爽！"
 priority = 114514
 force = true
-conditions = [
-    { type = "Location", locations = ["Castle"] }
-]
 segments = [
     { name = "start", text = "紧张刺激的战斗要开始力！", options = [
         { text = "ttk!", jump_to = "寄了", modifications = { "health"= -10}, avatar_set = { Main = "Main" }}
     ] },
     { name = "寄了", text = "怎么办劳大，我们打输了", options = [
-        { text = "投降喵QAQ", condition = [] },
-        { text = "投降喵QAQ", condition = [] },
-        { text = "投降喵QAQ", condition = [] }
+        { text = "投降喵QAQ", condition = { type = "True" } },
+        { text = "投降喵QAQ", condition = { type = "True" } },
+        { text = "投降喵QAQ", condition = { type = "True" } }
     ] }
 ]
