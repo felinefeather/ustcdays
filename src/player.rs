@@ -27,6 +27,8 @@ pub struct Attribute {
 pub struct Player {
     pub attributes: HashMap<String, i32>,
     pub attribute_defs: HashMap<String, Attribute>,
+
+    pub items: HashMap<String,(toml::Value,usize)>,
     pub game_time: chrono::NaiveDateTime,
     pub game_map: String,
     pub trigger: HashSet<Trigger>,
@@ -46,6 +48,7 @@ impl Player {
         Self {
             attributes: attr_map,
             attribute_defs: defs_map,
+            items: HashMap::new(),
             game_time: chrono::NaiveDateTime::parse_from_str("2024-01-01 00:00", "%Y-%m-%d %H:%M")
                 .unwrap(),
             game_map: "Town".to_string(),

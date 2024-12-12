@@ -3,9 +3,10 @@
 use game::{Game, GameDataSource};
 use eframe::egui;
 use egui::FontDefinitions;
+use systems::asset_system::ImageData;
 use std::{
     sync::mpsc::{Receiver, SendError, Sender},
-    thread,
+    thread, vec,
 };
 
 mod events;
@@ -46,7 +47,21 @@ fn main() -> eframe::Result {
 
 struct MainApp {
     backend: Backend,
+    persistence: Persistence,
     debug_cache: DebugCache,
+}
+
+struct Persistence {
+    avatar: Option<ImageData>,
+    deco: Vec<ImageData>,
+}
+
+impl Default for Persistence {
+    fn default() -> Self {
+        Self { avatar: Some(
+            ImageData { size: Some((100.,100.)), position: (0.,0.), path: r#"file://C:\Users\felin\ustcdays\assets\untitled.png"#.into() }
+        ), deco: vec![] }
+    }
 }
 
 struct Backend {
@@ -87,6 +102,7 @@ impl Default for MainApp {
                 sender: su,
                 cache: ToFrontend::new(),
             },
+            persistence: Persistence::default(),
             debug_cache: DebugCache::default()
         }
     }
@@ -100,9 +116,22 @@ impl eframe::App for MainApp {
             .resizable(false)
             .show(ctx, |ui| {
                 ui.heading("It is a sunny day today.");
-                ui.add(egui::Image::new(egui::include_image!(
-                    "../assets/untitled.png"
-                )));
+                if let Some(main) = &self.persistence.avatar {
+                    egui::Frame::none().show(ui,|ui| {
+                        ui.set_min_size(main.size.unwrap_or((0.,0.)).into());
+                        egui::Image::from_uri(main.path.clone()).paint_at(ui, 
+                            egui::Rect::from_min_size(ui.min_rect().min+main.position.into(), 
+                            main.size.unwrap_or((0.,0.)).into()));
+                        for img in &self.persistence.deco {
+                            egui::Image::new(
+                                egui::ImageSource::Uri(img.path.clone().into())
+                            ).paint_at(ui, 
+                                egui::Rect::from_min_size(ui.min_rect().min+img.position.into(), 
+                                img.size.unwrap_or((0.,0.)).into()));
+                        }
+                        
+                    });
+                }
                 ui.add_space(16.);
                 for (name, max, cur) in &self.backend.cache.player_attribute {
                     ui.add(egui::ProgressBar::new(*cur as f32 / *max as f32))
@@ -129,6 +158,15 @@ impl MainApp {
     pub fn try_frontend_update(&mut self) {
         if let Ok(f) = self.backend.receiver.try_recv() {
             self.backend.cache = f;
+            self.update_persistence();
         }
+    }
+
+    pub fn update_persistence(&mut self) {
+        if let Some(data) = &self.backend.cache.avatar_image.0 {
+            self.persistence.avatar = Some(data.clone());
+            println!("re-writed");
+        }
+        self.persistence.deco = self.backend.cache.avatar_image.1.clone();
     }
 }

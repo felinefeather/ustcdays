@@ -12,8 +12,7 @@ use crate::{
     frontend::{DebugFromFrontend, FromFrontend, Frontend, ToFrontend},
     player::{Attribute, Player},
     systems::{
-        map_system::{Map, MapSystem},
-        time_system::TimeSystem,
+        asset_system::AssetSystem, map_system::{Map, MapSystem}, time_system::TimeSystem
     },
 };
 use anyhow::Result;
@@ -25,12 +24,15 @@ pub struct GameData {
     pub events: Vec<EventData>,
     pub player: Vec<Attribute>, // 修改为 Vec<Attribute>
     #[serde(default)]
+    pub assets: AssetSystem,
+    #[serde(default)]
     pub trigger: HashMap<Trigger, Vec<String>>,
 }
 
 pub struct Game {
     time_system: TimeSystem,
     map_system: MapSystem,
+    asset_system: AssetSystem,
     event_system: EventSystem,
     player: Player,
     trigger_system: TriggerSystem,
@@ -89,6 +91,7 @@ impl Game {
         let data = source.into_gamedata()?;
 
         Ok(Game {
+            asset_system: data.assets,
             time_system: TimeSystem::new(),
             map_system: MapSystem::new(&data.maps),
             event_system: EventSystem::new(&data.events),
@@ -172,6 +175,7 @@ impl Game {
                 &mut self.player,
                 &self.time_system,
                 &self.map_system,
+                &self.asset_system,
                 &mut self.frontend,
             )?;
 

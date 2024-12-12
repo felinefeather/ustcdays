@@ -1,6 +1,8 @@
+use crate::debug;
 use crate::frontend::Frontend;
 use crate::game;
 use crate::player::Player;
+use crate::systems::asset_system::AssetSystem;
 use crate::systems::map_system::MapSystem;
 use crate::systems::time_system::TimeSystem;
 use serde::Deserialize;
@@ -21,14 +23,32 @@ pub struct EventOption {
     pub jump_to: Option<String>,
     #[serde(default)]
     pub trigger: Option<Vec<Trigger>>,
+
     #[serde(default)]
     pub modifications: Option<HashMap<String, i32>>, // 属性修正
+    #[serde(default)]
+    pub item_new: Option<HashMap<String,(toml::Value,usize)>>,
+    pub item_delete: Option<HashMap<String,(Option<toml::Value>,usize)>>, // 属性修正
+    #[serde(default)]
+    pub avatar_set: Option<AvatarSet>
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub enum AvatarSet {
+    Main(Vec<String>),
+    Deco(Vec<String>),
+    MainKeepingDeco(Vec<String>),
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventSegment {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub text: String,
+    #[serde(default)]
+    pub silent: bool,
+    #[serde(default)]
     pub options: Vec<EventOption>,
 }
 
@@ -97,6 +117,7 @@ impl EventSystem {
         player: &mut Player,
         time_system: &TimeSystem,
         map_system: &MapSystem,
+        asset_system: &AssetSystem,
         frontend: &mut Frontend,
     ) -> Result<(), game::GameErr> {
         player.stuck_in_event = false;
@@ -146,11 +167,15 @@ impl EventSystem {
 
         // 显示选项并获取选择
         let options: Vec<String> = segment.options.iter().map(|opt| opt.text.clone()).collect();
+        let mut timer = 0;
         let selected_option = loop {
-            let choice = frontend.display_options(&options)?;
+            let choice = if segment.silent {
+                timer += 1; timer - 1
+            } else { frontend.display_options(&options)? };
 
             let Some(selected_option) = segment.options.get(choice) else {
-                continue;
+                if !segment.silent { continue; }
+                else { *current_event_and_segment = None; return Ok(()); }
             };
 
             // 检查选项条件
@@ -165,7 +190,7 @@ impl EventSystem {
                 }
             }
             if !conditions_met {
-                frontend.cache.display_error("选项条件不满足！");
+                if !segment.silent { frontend.cache.display_error("选项条件不满足！");}
                 continue;
             }
             break selected_option;
@@ -175,6 +200,36 @@ impl EventSystem {
         if let Some(ref modifications) = selected_option.modifications {
             for (attr, value) in modifications {
                 player.modify_attribute(attr, *value);
+            }
+        }
+
+        if let Some(ref item_new) = selected_option.item_new {
+            for (str,(val,num)) in item_new {
+                if !player.items.contains_key(str) {
+                    player.items.insert(str.clone(), (val.clone(),*num));
+                } else {
+                    let num = num+player.items[str].1;
+                    player.items.insert(str.to_string(), (val.clone(),num));
+                }
+            }
+        }
+
+        if let Some(ref item_delete) = selected_option.item_delete {
+            for (str,val) in item_delete { 
+                if let (Some(val),_) = val {
+                    if player.items[str].0 != *val { continue; }
+                }
+                if !player.items.contains_key(str) { continue; }
+                if player.items[str].1 <= val.1 { player.items.remove(str); }
+                else { player.items.get_mut(str).unwrap().1 -= val.1; }
+            }
+        }
+
+        if let Some(ref avatar_set) = selected_option.avatar_set {
+            match avatar_set {
+                AvatarSet::Main(vec) => frontend.cache.change_avatar(asset_system.avatar[vec].clone()),
+                AvatarSet::Deco(vec) => frontend.cache.add_avatar_deco(asset_system.avatar[vec].clone()),
+                AvatarSet::MainKeepingDeco(vec) => frontend.cache.change_avatar_keeping_deco(asset_system.avatar[vec].clone()),
             }
         }
 

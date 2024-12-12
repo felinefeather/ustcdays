@@ -5,6 +5,7 @@ use std::{
 
 use crate::{
     game::{GameDataSource, GameErr},
+    systems::asset_system::ImageData,
     player::Attribute,
 };
 
@@ -16,6 +17,7 @@ pub struct ToFrontend {
     pub player_status: Vec<String>,
 
     pub player_attribute: Vec<(String, i32, i32)>,
+    pub avatar_image: (Option<ImageData>,Vec<ImageData>),
     pub debug: DebugToFrontend,
 }
 
@@ -112,6 +114,18 @@ impl ToFrontend {
     /// 显示错误信息
     pub fn display_error(&mut self, message: &str) {
         println!("ERROR: {message}");
+    }
+
+    pub fn change_avatar(&mut self, avatar: ImageData) {
+        self.avatar_image = (Some(avatar),vec![])
+    }
+
+    pub fn change_avatar_keeping_deco(&mut self, avatar: ImageData) {
+        self.avatar_image.0 = Some(avatar);
+    }
+
+    pub fn add_avatar_deco(&mut self, deco: ImageData) {
+        self.avatar_image.1.push(deco);
     }
 
     pub fn clone_and_clear(&mut self) -> Self {

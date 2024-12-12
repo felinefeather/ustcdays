@@ -24,10 +24,31 @@ pub struct PlayerAttributeCondition {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct PlayerItemContition {
+    pub items: HashMap<String, ItemCheck>
+}
+
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct AttributeCheck {
     pub greater_than: Option<i32>,
     pub less_than: Option<i32>,
 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ItemCheck {
+    pub expect_existence: Option<bool>,
+    pub expect_tags: Option<String>,
+    pub more_than: Option<usize>,
+    pub less_than: Option<usize>
+    // pub tag_check: HashMap<String,ValueCheck>,
+}
+
+// #[derive(Debug, Deserialize, Clone)]
+// pub enum ValueCheck {
+//     Equals(toml::Value),
+// }
+
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type")]
@@ -35,7 +56,13 @@ pub enum Condition {
     Time(TimeCondition),
     Location(LocationCondition),
     PlayerAttribute(PlayerAttributeCondition),
+    PlayerItem(PlayerItemContition),
     // 可以扩展更多条件类型
+
+    // 逻辑条件
+    And(Vec<Condition>),
+    Or(Vec<Condition>),
+    Xor(Vec<Condition>),
 }
 
 impl Condition {
@@ -60,6 +87,39 @@ impl Condition {
                 }
                 true
             }
+            Condition::PlayerItem(cond) => {
+                for (item,check) in &cond.items {
+                    let item = player.items.get(item);
+                    if let Some(exsists) = check.expect_existence {
+                        if item.is_some() != exsists { return false; }
+                    }
+                    let Some((item,num)) = item else { return false; };
+                    if check.more_than.is_some_and(|v|v>=*num)
+                        || check.less_than.is_some_and(|v|v<=*num) { 
+                            return false; 
+                    }
+                    if !item.is_table() {
+                        if check.expect_tags.is_none() { continue; }
+                        else { return false; }
+                    }
+                    let toml::Value::Table(item) = item else { panic!("never") };
+                    if check.expect_tags.is_some()
+                        &&!item.contains_key(check.expect_tags.as_ref().unwrap()) {
+                            return false;
+                        }
+                    
+                }
+                true
+            },
+            Condition::And(vec) => {
+                vec.iter().all(|cond| cond.is_met(time_system, map_system, player))
+            },
+            Condition::Or(vec) => {
+                vec.iter().any(|cond| cond.is_met(time_system, map_system, player))
+            },
+            Condition::Xor(vec) => {
+                vec.iter().fold(false, |fold,cond| fold^cond.is_met(time_system, map_system, player))
+            },
         }
     }
 }
