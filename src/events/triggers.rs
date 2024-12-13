@@ -40,6 +40,7 @@ pub enum Trigger {
 
     Always,
     Init,
+    PreInit,
     Custom(String),
 }
 
@@ -58,20 +59,23 @@ impl TriggerSystem {
     }
 
     pub fn set_default(
-        triggers: &mut HashSet<Trigger>
+        triggers: &mut HashSet<Trigger>,
     ) {
         triggers.insert(Trigger::Always);
     }
 
-    pub fn pick_event(
+    pub fn pick_event_and_clear(
         &mut self,
-        player: &Player,
+        player: &mut Player,
         time_system: &TimeSystem,
         map_system: &MapSystem,
         current_event_and_segment: &Option<(String, Option<String>)>,
         event_system: &mut EventSystem,
     ) -> Option<String> {
         let evt = self.get_all_events(&player.trigger);
+        player.trigger.clear(); // 我觉得可以分成持久化与非持久化的trigger，这样更合理。
+        // …… 不对。Trigger是用的相当保守的，所以被称为Trigger。
+        // 但是我们仍然需要删除trigger。这是肯定的。如果持续触发，就持续添加……什么怪主意
         let (cur_priority, cur_force) = current_event_and_segment.as_ref().map(|cur|
             event_system.events.get(&cur.0).map(
                 |evt| (evt.priority,evt.force)

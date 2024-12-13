@@ -161,8 +161,6 @@ impl MainApp {
     pub fn try_frontend_update(&mut self) {
         if let Ok(f) = self.backend.receiver.try_recv() {
             self.backend.cache.merge(f);
-            println!("{}",self.backend.cache.player_attribute.clone().unwrap()[0].1);
-            println!("{}",self.backend.cache.player_attribute.clone().unwrap()[1].1);
             self.update_persistence();
         }
     }

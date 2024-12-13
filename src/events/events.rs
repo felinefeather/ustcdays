@@ -118,39 +118,32 @@ impl EventSystem {
 impl EventSystem {
     pub fn process_events(
         &mut self,
-        current_event_and_segment: &mut Option<(String, Option<String>)>,
+        mut current_event_and_segment: Option<(String, Option<String>)>,
         player: &mut Player,
         time_system: &TimeSystem,
         map_system: &MapSystem,
         asset_system: &AssetSystem,
         frontend: &mut Frontend,
-    ) -> Result<(), game::GameErr> {
+    ) -> Result<Option<(String, Option<String>)>, game::GameErr> {
         player.stuck_in_event = false;
         let able_to_stuck;
-        // 从优先级队列中取出优先级最高的事件
-        if current_event_and_segment.is_none() {
-            *current_event_and_segment = self
-                .registered_events
-                .pop()
-                .map(|event| {
-                    if event.force || self.should_trigger_event(&event, player) {
-                        Some((event.name.clone(), None))
-                    } else { None }
-                })
-                .unwrap_or(None);
-        }
-        let Some((event_name, segment_name)) = current_event_and_segment else {
-            return Ok(());
-        };
+        // // 从优先级队列中取出优先级最高的事件
+        // if current_event_and_segment.is_none() {
+        //     current_event_and_segment = self
+        //         .registered_events
+        //         .pop()
+        //         .map(|event| {
+        //             if event.force || self.should_trigger_event(&event, player) {
+        //                 Some((event.name.clone(), None))
+        //             } else { None }
+        //         })
+        //         .unwrap_or(None);
+        // }
 
+        let Some((event_name, segment_name)) = &mut current_event_and_segment else { return Ok(None);};
+        println!("{event_name}");
         // 获取当前事件数据
-        let Some(event) = self
-            .registered_events
-            .iter()
-            .find(|e| e.name == *event_name)
-        else {
-            return Ok(());
-        };
+        let Some(event) = self.events.get(event_name) else { return Ok(None);};
         
         able_to_stuck = event.stuck_moving;
 
@@ -159,16 +152,10 @@ impl EventSystem {
             .as_ref()
             .and_then(|seg_name| event.segments.iter().find(|seg| seg.name.eq(seg_name)))
             .or(event.segments.first())
-        else {
-            return Ok(());
-        };
+        else { return Ok(None);};
         frontend.cache.display_text(&segment.text);
 
-        if segment.options.is_empty() {
-            // 无选项，结束事件
-            *current_event_and_segment = None;
-            return Ok(());
-        }
+        if segment.options.is_empty() { return Ok(None); }
 
         // 选项与判定
 
@@ -229,19 +216,14 @@ impl EventSystem {
             }
         }
 
-        if let Some(ref jump_to_event) = selected_option.jump_to_event  {
-            *event_name = jump_to_event.clone();
-            *segment_name = None;
+        match (&selected_option.jump_to_event,&selected_option.jump_to) {
+            (None,None) => {current_event_and_segment = None;}
+            (Some(evt),seg) => { *event_name = evt.clone(); *segment_name = seg.clone();}
+            (None,Some(jump_to)) => {*segment_name = Some(jump_to.clone());}
         }
 
         // 跳转到指定段落
-        if let Some(ref jump_to) = selected_option.jump_to {
-            *segment_name = Some(jump_to.clone());
-            // 不判定是否存在指定段落。必要的err需要直接必要地暴露
-        } else {
-            // 没有跳转目标是唯一的结束事件标志——但如果事件在Force区，还是不要这么做了
-            *current_event_and_segment = None;
-        }
+        
 
         if let Some(trigger) = selected_option.trigger.clone() {
             for tr in trigger {
@@ -250,7 +232,7 @@ impl EventSystem {
         }
 
         player.stuck_in_event = current_event_and_segment.is_some() && able_to_stuck;
-        Ok(())
+        Ok(current_event_and_segment)
     }
 
     fn should_trigger_event(&self, _event: &EventData, _player: &Player) -> bool {

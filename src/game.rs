@@ -128,14 +128,14 @@ impl Game {
 
             TriggerSystem::set_default(&mut player.trigger);
 
-            if let Some(evt) = trigger_system.pick_event(
-                    &player,&time_system,&map_system,
+            if let Some(evt) = trigger_system.pick_event_and_clear(
+                    player,&time_system,&map_system,
                     &current_event_and_segment,event_system) {
-                *current_event_and_segment = Some((evt,None));
+                *current_event_and_segment = Some((evt.clone(),None));
             }
 
-            self.event_system.process_events(
-                &mut self.current_event_and_segment,
+            *current_event_and_segment = self.event_system.process_events(
+                std::mem::take(current_event_and_segment),
                 &mut self.player,
                 &self.time_system,
                 &self.map_system,
@@ -147,7 +147,7 @@ impl Game {
 
     pub fn run(mut self) {
         loop {
-            let Err(e) = self.game_loop() else { todo!("game over"); }; 
+            let Err(e) = self.main_loop() else { todo!("game over"); }; 
             match e {
                 GameErr::DebugEscape(frontend_debug_input) => {
                     use crate::frontend::DebugSign::*;
@@ -158,8 +158,7 @@ impl Game {
                                 (self.frontend.sender, self.frontend.receiver),
                             )
                             .unwrap_or_else(|error| {
-                                dbg!(error);
-                                todo!("没做怎么处理err红豆私密马赛")
+                                panic!("{}", error);
                             });
                         }
                         SetAttribute(str, val) => {
@@ -170,96 +169,95 @@ impl Game {
                 }
                 GameErr::Error(error) => {
                     dbg!(error);
-                    todo!("没做怎么处理err红豆私密马赛")
                 }
                 GameErr::Default => (),
             }
         }
     }
 
-    pub fn game_loop(&mut self) -> Result<(), GameErr> {
-        loop {
-            // 检测 dbg 是否发生
-            if let Ok(FromFrontend::Debug(dbg)) = self.frontend.receiver.try_recv() {
-                return Err(dbg.into());
-            }
+    // pub fn game_loop(&mut self) -> Result<(), GameErr> {
+    //     loop {
+    //         // 检测 dbg 是否发生
+    //         if let Ok(FromFrontend::Debug(dbg)) = self.frontend.receiver.try_recv() {
+    //             return Err(dbg.into());
+    //         }
 
-            // 触发事件
-            self.trigger_system.check(
-                &self.player.trigger,
-                &self.time_system,
-                &self.map_system,
-                &self.player,
-                &mut self.event_system,
-            )?; 
+    //         // 触发事件
+    //         self.trigger_system.check(
+    //             &self.player.trigger,
+    //             &self.time_system,
+    //             &self.map_system,
+    //             &self.player,
+    //             &mut self.event_system,
+    //         )?; 
             
-            self.player.trigger.clear();
-            self.player.trigger.insert(Trigger::Always);
+    //         self.player.trigger.clear();
+    //         self.player.trigger.insert(Trigger::Always);
 
-            // 处理事件
-            self.event_system.process_events(
-                &mut self.current_event_and_segment,
-                &mut self.player,
-                &self.time_system,
-                &self.map_system,
-                &self.asset_system,
-                &mut self.frontend,
-            )?;
+    //         // 处理事件
+    //         self.event_system.process_events(
+    //             &mut self.current_event_and_segment,
+    //             &mut self.player,
+    //             &self.time_system,
+    //             &self.map_system,
+    //             &self.asset_system,
+    //             &mut self.frontend,
+    //         )?;
 
-            // 更新玩家状态
-            self.player.game_time = self.time_system.current_time.to_string();
-            self.player.game_map = self.map_system.get_current_location().to_string();
-            let status = self.player.get_over_under_descriptions();
-            self.frontend.cache.display_player_status(&status);
-            self.frontend.cache
-                .display_player_attributes(&self.player.attributes.val, &self.player.attribute_defs);
+    //         // 更新玩家状态
+    //         self.player.game_time = self.time_system.current_time.to_string();
+    //         self.player.game_map = self.map_system.get_current_location().to_string();
+    //         let status = self.player.get_over_under_descriptions();
+    //         self.frontend.cache.display_player_status(&status);
+    //         self.frontend.cache
+    //             .display_player_attributes(&self.player.attributes.val, &self.player.attribute_defs);
 
-            // 示例：玩家选择是否移动地图\
-            // 把这个用 event 重写！
+    //         // 示例：玩家选择是否移动地图\
+    //         // 把这个用 event 重写！
 
-            // if !self.player.stuck_in_event {
-            //     self.frontend.cache.display_text("你想要移动到其他地点吗？");
-            //     let choice = self
-            //         .frontend
-            //         .display_options(&vec![("是".to_string(),true), ("否".to_string(),true)],false)?;
-            //     if choice == 0 {
-            //         // 显示可移动的地图
-            //         let current_map = self.map_system.get_current_location();
-            //         let connections = self
-            //             .map_system
-            //             .maps
-            //             .get(current_map)
-            //             .unwrap()
-            //             .connections
-            //             .clone();
+    //         // if !self.player.stuck_in_event {
+    //         //     self.frontend.cache.display_text("你想要移动到其他地点吗？");
+    //         //     let choice = self
+    //         //         .frontend
+    //         //         .display_options(&vec![("是".to_string(),true), ("否".to_string(),true)],false)?;
+    //         //     if choice == 0 {
+    //         //         // 显示可移动的地图
+    //         //         let current_map = self.map_system.get_current_location();
+    //         //         let connections = self
+    //         //             .map_system
+    //         //             .maps
+    //         //             .get(current_map)
+    //         //             .unwrap()
+    //         //             .connections
+    //         //             .clone();
 
-            //         let options: Vec<(String,bool)> = connections
-            //             .iter()
-            //             .map(|c| (
-            //                 format!("{} (需要 {} 分钟)", c.optional_name.clone().unwrap_or(c.to.clone()),c.time ),
-            //                 c.condition.is_none() || c.condition.as_ref().unwrap().is_met(&self.time_system, &self.map_system, &self.player)
-            //             )).collect();
+    //         //         let options: Vec<(String,bool)> = connections
+    //         //             .iter()
+    //         //             .map(|c| (
+    //         //                 format!("{} (需要 {} 分钟)", c.optional_name.clone().unwrap_or(c.to.clone()),c.time ),
+    //         //                 c.condition.is_none() || c.condition.as_ref().unwrap().is_met(&self.time_system, &self.map_system, &self.player)
+    //         //             )).collect();
 
-            //         let map_choice = self.frontend.display_options(&options,false)?;
+    //         //         let map_choice = self.frontend.display_options(&options,false)?;
 
-            //         // 确认目的地，开始尝试移动
-            //         let destination = &connections[map_choice].to;
-            //         match self.map_system.travel(destination, &mut self.time_system) {
-            //             Ok(_) => {
-            //                 self.player
-            //                     .trigger
-            //                     .insert(Trigger::Reached(destination.clone()));
-            //                 self.frontend
-            //                     .cache
-            //                     .display_text(
-            //                         self.map_system.maps[destination].description.clone()
-            //                             .unwrap_or("已抵达".into()).as_str());
-            //             }
-            //             Err(e) => self.frontend.cache.display_error(&e),
-            //         }
+    //         //         // 确认目的地，开始尝试移动
+    //         //         let destination = &connections[map_choice].to;
+    //         //         match self.map_system.travel(destination, &mut self.time_system) {
+    //         //             Ok(_) => {
+    //         //                 self.player
+    //         //                     .trigger
+    //         //                     .insert(Trigger::Reached(destination.clone()));
+    //         //                 self.frontend
+    //         //                     .cache
+    //         //                     .display_text(
+    //         //                         self.map_system.maps[destination].description.clone()
+    //         //                             .unwrap_or("已抵达".into()).as_str());
+    //         //             }
+    //         //             Err(e) => self.frontend.cache.display_error(&e),
+    //         //         }
                     
-            //     }
-            // }
-        }
-    }
+    //         //     }
+    //         // }
+    //     }
+    // }
 }

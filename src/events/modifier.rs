@@ -96,7 +96,7 @@ impl Modifier {
                     group.iter().for_each(|m| m.modify(time_system, map_system, player));
                 }
             },
-            Modifier::None => todo!(),
+            Modifier::None => (),
         }
     }
 }
