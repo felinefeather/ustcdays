@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::events::triggers::Trigger;
+use crate::events::{modifier::{Identity, ValModifier}, triggers::Trigger};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Attribute {
@@ -37,6 +37,23 @@ impl CurrentAttribute {
     pub fn get(&self,k: &str) -> Option<&i32> {
         Some(&self.val.iter().filter(|(str,_)| str != k).next()?.1)
     }
+
+    pub fn id_mut(&mut self,k: &crate::events::modifier::Identity) -> Option<&mut i32> {
+        match k {
+            Identity::Str(k) => self.get_mut(k),
+            Identity::Index(i) => self.val.get_mut(*i).map(|v| &mut v.1),
+            Identity::None => None,
+        }
+    }
+
+    pub fn id_mut_with_name<'a>(&'a mut self,k: &'a crate::events::modifier::Identity) -> Option<(&mut i32,&'a String)> {
+        match k {
+            Identity::Str(k) => self.get_mut(k).map(|i|(i,k)),
+            Identity::Index(i) => self.val.get_mut(*i).map(|v| (&mut v.1,&v.0)),
+            Identity::None => None,
+        }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&String,&i32)> {
         self.val.iter().map(|f| (&f.0,&f.1))
     }
@@ -81,16 +98,15 @@ impl Player {
         }
     }
 
-    pub fn modify_attribute(&mut self, attr: &str, value: i32) {
-        if let Some(current) = self.attributes.get_mut(attr) {
-            *current += value;
-            println!("modified: {attr}, {current}");
+    pub fn modify_attribute(&mut self, attr: &Identity, value: &ValModifier) {
+        if let Some((current,k)) = self.attributes.id_mut_with_name(attr) {
+            value.apply(current);
             // 检查属性上限和下限
-            if *current > self.attribute_defs.get(attr).unwrap().max {
-                *current = self.attribute_defs.get(attr).unwrap().max;
+            if *current > self.attribute_defs.get(k).unwrap().max {
+                *current = self.attribute_defs.get(k).unwrap().max;
             }
-            if *current < self.attribute_defs.get(attr).unwrap().min {
-                *current = self.attribute_defs.get(attr).unwrap().min;
+            if *current < self.attribute_defs.get(k).unwrap().min {
+                *current = self.attribute_defs.get(k).unwrap().min;
             }
         }
     }

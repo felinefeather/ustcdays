@@ -107,20 +107,7 @@ impl Game {
             map_system: MapSystem::new(&data.maps),
             event_system: EventSystem::new(&data.events),
             player: Player::new(&data.player),
-            trigger_system: TriggerSystem {
-                registed_event: {
-                    let ret = data.trigger.iter()
-                        .fold(HashMap::new(), |mut map: HashMap<Trigger, Vec<String>>,value| {
-                            for (key,value) in value {
-                                if let Some(map) = map.get_mut(value) {
-                                    map.push(key.clone());
-                                } else { map.insert(value.clone(), vec![key.clone()]);}
-                            }
-                            map
-                    });
-                    ret
-                },
-            },
+            trigger_system: TriggerSystem::new(&data.trigger),
             current_event_and_segment: None,
 
             frontend: Frontend {
@@ -131,21 +118,30 @@ impl Game {
         })
     }
 
-    pub fn main_loop(&mut self) {
+    pub fn main_loop(&mut self) -> Result<(),GameErr> {
         loop {
             let Self { 
-                time_system,
-                map_system, 
-                asset_system, 
-                event_system, 
-                player, 
-                trigger_system, 
-                current_event_and_segment, 
-                frontend 
-            } = &mut self;
-            trigger_system.add(player,time_system,map_system);
-            event_system.try_insert(trigger_system.pick_event());
-            event_system.run(player,asset_system,frontend);
+                player, time_system,map_system, 
+                trigger_system, event_system, current_event_and_segment,
+                asset_system, frontend 
+            } = self;
+
+            TriggerSystem::set_default(&mut player.trigger);
+
+            if let Some(evt) = trigger_system.pick_event(
+                    &player,&time_system,&map_system,
+                    &current_event_and_segment,event_system) {
+                *current_event_and_segment = Some((evt,None));
+            }
+
+            self.event_system.process_events(
+                &mut self.current_event_and_segment,
+                &mut self.player,
+                &self.time_system,
+                &self.map_system,
+                &asset_system,
+                frontend,
+            )?;
         }
     }
 

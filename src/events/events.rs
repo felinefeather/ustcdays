@@ -7,6 +7,7 @@ use crate::systems::time_system::TimeSystem;
 use serde::Deserialize;
 
 use super::conditions::Condition;
+use super::modifier::Modifier;
 use super::triggers::Trigger;
 use anyhow::Result;
 use std::cmp::Ordering;
@@ -15,21 +16,23 @@ use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventOption {
-    pub text: String,
-    #[serde(default)]
-    pub condition: Option<Condition>,
-    #[serde(default)]
-    pub jump_to: Option<String>,
-    #[serde(default)]
-    pub trigger: Option<Vec<Trigger>>,
+    pub text: String,                  // 描述
+    pub condition: Option<Condition>,  // 选项的条件——是不是下面那个hide or not得放在这里？
+
+    pub jump_to_event: Option<String>, // 选项下一个event。总是结束当前事件
+    pub jump_to: Option<String>,       // 选项下一个segment。如果为空，结束事件
+    pub trigger: Option<Vec<Trigger>>, // 选项触发的触发器。好像没什么用，不确定、再看看。
+    pub avatar_set: Option<AvatarSet>, // 更换头像……因为Modification不该接触到前端，所以就放在这里了。我们应当认为，所有的前端工作都在 Event 层完成
 
     #[serde(default)]
-    pub modifications: Option<HashMap<String, i32>>, // 属性修正
-    #[serde(default)]
-    pub item_new: Option<HashMap<String,(toml::Value,usize)>>,
-    pub item_delete: Option<HashMap<String,(Option<toml::Value>,usize)>>, // 属性修正
-    #[serde(default)]
-    pub avatar_set: Option<AvatarSet>
+    pub modifier: Modifier,             // 默认为不修改
+
+    // #[serde(default)]
+    // pub modifications: Option<HashMap<String, i32>>, // 属性修正
+    // #[serde(default)]
+    // pub item_new: Option<HashMap<String,(toml::Value,usize)>>,
+    // pub item_delete: Option<HashMap<String,(Option<toml::Value>,usize)>>, // 属性修正
+    
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -167,67 +170,56 @@ impl EventSystem {
             return Ok(());
         }
 
-        // 显示选项并获取选择
+        // 选项与判定
 
-        // hide_disabled_options
-        // 实现的不好！！！
         let options: Vec<(String,bool)> = segment
             .options.iter().map(|opt| (
-                    opt.text.clone(),
-                    if let Some(cond) = &opt.condition {
-                        cond.is_met(time_system, map_system, player)
-                    } else { true }
-                )).collect();
-        let mut timer = 0;
-        let selected_option = loop {
-            let choice = if segment.silent {
-                timer += 1; timer - 1
-            } else { frontend.display_options(&options,segment.hide_disabled_options)? };
+                opt.text.clone(),             // 文本
+                !opt.condition.as_ref() // 与“没有条件或条件成立”
+                    .is_some_and(|c| !c.is_met(time_system, map_system, player))
+            )).collect();
 
-            let Some(selected_option) = segment.options.get(choice) else {
-                if !segment.silent { continue; }
-                else { *current_event_and_segment = None; return Ok(()); }
-            };
-
-            // 检查选项条件
-            let Some(ref condition) = selected_option.condition else {
-                break selected_option;
-            };
-            if !condition.is_met(time_system, map_system, player) {
-                if !segment.silent { frontend.cache.display_error("选项条件不满足！");}
-                continue;
-            }
-            break selected_option;
+        let selected_option = if segment.silent {
+            // 如果为无声事件，则自动选择，然后进入下一阶段。有意义吗？我不知道，就这么放着吧。如果无声事件寄了，直接err吧抬走不送
+            options.iter().enumerate().filter(|p| p.1.1 )
+                .next().map(|(i,_)|&segment.options[i]).unwrap()
+        } else { 
+            // 前端保证如此；相信前端。
+            &segment.options[{
+                frontend.display_options(&options,segment.hide_disabled_options)?
+            }]
         };
 
         // 应用属性修改
-        if let Some(ref modifications) = selected_option.modifications {
-            for (attr, value) in modifications {
-                player.modify_attribute(attr, *value);
-            }
-        }
+        selected_option.modifier.modify(time_system, map_system, player);
+        // if let Some(ref modifications) = selected_option.modifications {
+        //     for (attr, value) in modifications {
+        //         // player.modify_attribute(attr, *value);
+        //         todo!()
+        //     }
+        // }
 
-        if let Some(ref item_new) = selected_option.item_new {
-            for (str,(val,num)) in item_new {
-                if !player.items.contains_key(str) {
-                    player.items.insert(str.clone(), (val.clone(),*num));
-                } else {
-                    let num = num+player.items[str].1;
-                    player.items.insert(str.to_string(), (val.clone(),num));
-                }
-            }
-        }
+        // if let Some(ref item_new) = selected_option.item_new {
+        //     for (str,(val,num)) in item_new {
+        //         if !player.items.contains_key(str) {
+        //             player.items.insert(str.clone(), (val.clone(),*num));
+        //         } else {
+        //             let num = num+player.items[str].1;
+        //             player.items.insert(str.to_string(), (val.clone(),num));
+        //         }
+        //     }
+        // }
 
-        if let Some(ref item_delete) = selected_option.item_delete {
-            for (str,val) in item_delete { 
-                if let (Some(val),_) = val {
-                    if player.items[str].0 != *val { continue; }
-                }
-                if !player.items.contains_key(str) { continue; }
-                if player.items[str].1 <= val.1 { player.items.remove(str); }
-                else { player.items.get_mut(str).unwrap().1 -= val.1; }
-            }
-        }
+        // if let Some(ref item_delete) = selected_option.item_delete {
+        //     for (str,val) in item_delete { 
+        //         if let (Some(val),_) = val {
+        //             if player.items[str].0 != *val { continue; }
+        //         }
+        //         if !player.items.contains_key(str) { continue; }
+        //         if player.items[str].1 <= val.1 { player.items.remove(str); }
+        //         else { player.items.get_mut(str).unwrap().1 -= val.1; }
+        //     }
+        // }
 
         if let Some(ref avatar_set) = selected_option.avatar_set {
             match avatar_set {
@@ -237,15 +229,18 @@ impl EventSystem {
             }
         }
 
+        if let Some(ref jump_to_event) = selected_option.jump_to_event  {
+            *event_name = jump_to_event.clone();
+            *segment_name = None;
+        }
+
         // 跳转到指定段落
         if let Some(ref jump_to) = selected_option.jump_to {
-            if let Some(next_segment) = event.segments.iter().find(|s| s.name == *jump_to) {
-                // frontend.display_text(&next_segment.text);
-                // 可以递归或循环处理后续段落
-                *segment_name = Some(next_segment.name.clone());
-            }
+            *segment_name = Some(jump_to.clone());
+            // 不判定是否存在指定段落。必要的err需要直接必要地暴露
         } else {
-            *segment_name = None
+            // 没有跳转目标是唯一的结束事件标志——但如果事件在Force区，还是不要这么做了
+            *current_event_and_segment = None;
         }
 
         if let Some(trigger) = selected_option.trigger.clone() {
@@ -253,12 +248,6 @@ impl EventSystem {
                 player.trigger.insert(tr);
             }
         }
-
-        // 结束当前事件
-        if current_event_and_segment
-            .as_ref()
-            .is_some_and(|cur| cur.1.is_none())
-            { *current_event_and_segment = None; }
 
         player.stuck_in_event = current_event_and_segment.is_some() && able_to_stuck;
         Ok(())
