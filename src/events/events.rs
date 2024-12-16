@@ -120,8 +120,8 @@ impl EventSystem {
         &mut self,
         mut current_event_and_segment: Option<(String, Option<String>)>,
         player: &mut Player,
-        time_system: &TimeSystem,
-        map_system: &MapSystem,
+        time_system: &mut TimeSystem,
+        map_system: &mut MapSystem,
         asset_system: &AssetSystem,
         frontend: &mut Frontend,
     ) -> Result<Option<(String, Option<String>)>, game::GameErr> {
@@ -235,8 +235,8 @@ impl EventSystem {
         Ok(current_event_and_segment)
     }
 
-    fn should_trigger_event(&self, _event: &EventData, _player: &Player) -> bool {
-        // 可以在这里添加更多的事件触发逻辑
-        true
-    }
+    // fn should_trigger_event(&self, _event: &EventData, _player: &Player) -> bool {
+    //     // 可以在这里添加更多的事件触发逻辑
+    //     true
+    // }
 }

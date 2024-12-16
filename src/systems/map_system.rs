@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 use crate::events::conditions::Condition;
 
+#[allow(dead_code)]
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Connection {
     pub to: String,
@@ -10,6 +12,7 @@ pub struct Connection {
     pub optional_name: Option<String>,
     pub condition: Option<Condition>,
 }
+#[allow(dead_code)]
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Map {

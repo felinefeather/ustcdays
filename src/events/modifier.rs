@@ -10,10 +10,8 @@ pub enum Modifier {
     Attribute { attr: Identity, val: ValModifier },
     Item { item: String, modify: ItemModifier },
 
-    Group { 
-        group: Vec<Modifier>,
-        cond: Option<Condition>
-    },
+    Group(Vec<Modifier>),
+    Condition{group: Vec<Modifier>,cond: Option<Condition>},
     #[default]
     None
 }
@@ -82,7 +80,7 @@ impl Modifier {
         map_system: &MapSystem,
         player: &mut Player
     ) {
-        let trigger = &mut player.trigger;
+        // let trigger = &mut player.trigger;
         match &self {
             Modifier::Attribute { attr, val } => {
                 player.modify_attribute(attr, val); 
@@ -91,7 +89,10 @@ impl Modifier {
                 let Some(val) = player.items.get_mut(item) else { return; };
                 modify.apply(val); if val.1 == 0 { player.items.remove(item); }
             },
-            Modifier::Group { group, cond } => {
+            Modifier::Group(group) => {
+                group.iter().for_each(|m| m.modify(time_system, map_system, player));
+            },
+            Modifier::Condition { group, cond } => {
                 if cond.is_none() || cond.as_ref().unwrap().is_met(time_system, map_system, player) {
                     group.iter().for_each(|m| m.modify(time_system, map_system, player));
                 }

@@ -136,11 +136,8 @@ impl Game {
 
             *current_event_and_segment = self.event_system.process_events(
                 std::mem::take(current_event_and_segment),
-                &mut self.player,
-                &self.time_system,
-                &self.map_system,
-                &asset_system,
-                frontend,
+                player,time_system,map_system,
+                &asset_system, frontend,
             )?;
         }
     }
