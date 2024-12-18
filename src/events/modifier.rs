@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::{player::Player, systems::{map_system::MapSystem, time_system::TimeSystem}};
+use crate::{player::Player, systems::Systems};
 
 use super::conditions::Condition;
 
@@ -9,6 +9,7 @@ use super::conditions::Condition;
 pub enum Modifier {
     Attribute { attr: Identity, val: ValModifier },
     Item { item: String, modify: ItemModifier },
+    Position { towards: String, #[serde(default)] check: bool },
 
     Group(Vec<Modifier>),
     Condition{group: Vec<Modifier>,cond: Option<Condition>},
@@ -76,28 +77,37 @@ impl ItemModifier {
 impl Modifier {
     pub fn modify(
         &self, 
-        time_system: &TimeSystem,
-        map_system: &MapSystem,
+        systems: &Systems,
         player: &mut Player
-    ) {
+    ) -> anyhow::Result<()> {
         // let trigger = &mut player.trigger;
         match &self {
             Modifier::Attribute { attr, val } => {
                 player.modify_attribute(attr, val); 
             },
             Modifier::Item { item, modify } => {
-                let Some(val) = player.items.get_mut(item) else { return; };
+                let Some(val) = player.items.get_mut(item) else { return Ok(()); };
                 modify.apply(val); if val.1 == 0 { player.items.remove(item); }
             },
             Modifier::Group(group) => {
-                group.iter().for_each(|m| m.modify(time_system, map_system, player));
+                for modifier in group {
+                    modifier.modify(systems, player)?;
+                }
             },
             Modifier::Condition { group, cond } => {
-                if cond.is_none() || cond.as_ref().unwrap().is_met(time_system, map_system, player) {
-                    group.iter().for_each(|m| m.modify(time_system, map_system, player));
+                if cond.is_none() || cond.as_ref().unwrap().is_met(systems, player) {
+                    for modifier in group {
+                        modifier.modify(systems, player)?;
+                    }
                 }
             },
             Modifier::None => (),
-        }
+            Modifier::Position { towards, check } => {
+                if *check {
+                    systems.map.travel(player, &towards, &systems.time)?;
+                } else { player.game_map = towards.clone() }
+            },
+        };
+        Ok(())
     }
 }

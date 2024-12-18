@@ -1,9 +1,9 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] use frontend::{FromFrontend, ToFrontend};
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] 
+use frontend::{FromFrontend, ToFrontend,assets::ImageData};
 // hide console window on Windows in release
 use game::{Game, DataSource};
 use eframe::egui;
 use egui::FontDefinitions;
-use systems::asset_system::ImageData;
 use std::{
     sync::mpsc::{Receiver, SendError, Sender},
     thread, vec,
@@ -116,7 +116,6 @@ impl eframe::App for MainApp {
         egui::SidePanel::left("PlayerStateBar")
             .resizable(false)
             .show(ctx, |ui| {
-                ui.heading("It is a sunny day today.");
                 if let Some(main) = &self.persistence.avatar {
                     egui::Frame::none().show(ui,|ui| {
                         ui.set_min_size(main.size.unwrap_or((0.,0.)).into());

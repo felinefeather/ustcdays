@@ -3,11 +3,8 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::player::Player;
-use crate::systems::map_system::MapSystem;
-use crate::systems::time_system::TimeSystem;
+use crate::systems::Systems;
 
-use super::events::EventSystem;
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -64,27 +61,24 @@ impl TriggerSystem {
         triggers.insert(Trigger::Always);
     }
 
-    pub fn pick_event_and_clear(
-        &mut self,
-        player: &mut Player,
-        time_system: &TimeSystem,
-        map_system: &MapSystem,
-        current_event_and_segment: &Option<(String, Option<String>)>,
-        event_system: &mut EventSystem,
+    pub fn pick_event(
+        &self,
+        player: &Player,
+        systems: &Systems
     ) -> Option<String> {
         let evt = self.get_all_events(&player.trigger);
-        player.trigger.clear(); // 我觉得可以分成持久化与非持久化的trigger，这样更合理。
+        // 我觉得可以分成持久化与非持久化的trigger，这样更合理。
         // …… 不对。Trigger是用的相当保守的，所以被称为Trigger。
         // 但是我们仍然需要删除trigger。这是肯定的。如果持续触发，就持续添加……什么怪主意
-        let (cur_priority, cur_force) = current_event_and_segment.as_ref().map(|cur|
-            event_system.events.get(&cur.0).map(
+        let (cur_priority, cur_force) = player.cur_evt_seg.as_ref().map(|cur|
+            systems.event.events.get(&cur.0).map(
                 |evt| (evt.priority,evt.force)
             )).unwrap_or(Some((0,false))).unwrap();
         if cur_force { return None; } // 如果硬要执行，我们也不好阻止。
         let mut heap = BinaryHeap::new();
-        for event in evt.iter().filter_map(|k| event_system.events.get(k)) {
+        for event in evt.iter().filter_map(|k| systems.event.events.get(k)) {
             // 检查事件条件
-            if event.condition.is_met(time_system, map_system, player)
+            if event.condition.is_met(systems, player)
               && (cur_priority == 0 || event.priority > cur_priority) {
                 heap.push(event);
             }
@@ -92,26 +86,26 @@ impl TriggerSystem {
         heap.pop().map(|evt| evt.name.clone())
     }
 
-    pub fn check(
-        &mut self,
-        triggers: &HashSet<Trigger>,
-        time_system: &TimeSystem,
-        map_system: &MapSystem,
-        player: &Player,
-        event_system: &mut EventSystem,
-    ) -> Result<()> {
-        let events = self.get_all_events(triggers);
-        let mut to_reg = vec![];
-        for event in events.iter().filter_map(|k| event_system.events.get(k)) {
-            // 检查事件条件
-            if event.condition.is_met(time_system, map_system, player) {
-                to_reg.push(event.clone());
-            }
-        }
-        for i in to_reg {
-            dbg!(i.clone());
-            event_system.register_event(i);
-        }
-        Ok(())
-    }
+    // pub fn check(
+    //     &mut self,
+    //     triggers: &HashSet<Trigger>,
+    //     time_system: &TimeSystem,
+    //     map_system: &MapSystem,
+    //     player: &Player,
+    //     event_system: &mut EventSystem,
+    // ) -> Result<()> {
+    //     let events = self.get_all_events(triggers);
+    //     let mut to_reg = vec![];
+    //     for event in events.iter().filter_map(|k| event_system.events.get(k)) {
+    //         // 检查事件条件
+    //         if event.condition.is_met(time_system, map_system, (player)) {
+    //             to_reg.push(event.clone());
+    //         }
+    //     }
+    //     for i in to_reg {
+    //         dbg!(i.clone());
+    //         event_system.register_event(i);
+    //     }
+    //     Ok(())
+    // }
 }

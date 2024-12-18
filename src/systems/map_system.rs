@@ -1,7 +1,8 @@
 use serde::Deserialize;
+use anyhow::{Result,anyhow};
 use std::collections::HashMap;
 
-use crate::events::conditions::Condition;
+use crate::{events::conditions::Condition, player::Player};
 
 #[allow(dead_code)]
 
@@ -24,7 +25,6 @@ pub struct Map {
 
 pub struct MapSystem {
     pub maps: HashMap<String, Map>,
-    pub current_location: String,
 }
 
 impl MapSystem {
@@ -36,32 +36,27 @@ impl MapSystem {
 
         Self {
             maps: map_hash,
-            current_location: "Town".to_string(), // 默认起始位置
         }
     }
 
-    pub fn get_current_location(&self) -> &str {
-        &self.current_location
-    }
-
     pub fn travel(
-        &mut self,
+        &self, player: &mut Player,
         to: &str,
-        time_system: &mut super::time_system::TimeSystem,
-    ) -> Result<(), String> {
+        time_system: &super::time_system::TimeSystem,
+    ) -> Result<()> {
         let current_map = self
             .maps
-            .get(&self.current_location)
-            .ok_or("当前地图不存在")?;
+            .get(&player.game_map)
+            .ok_or(anyhow!("当前地图不存在"))?;
         if let Some(conn) = current_map.connections.iter().find(|c| c.to == to) {
             // 处理旅行时间
             for _ in 0..conn.time {
-                time_system.update();
+                time_system.update(player);
             }
-            self.current_location = to.to_string();
+            player.game_map = to.to_string();
             Ok(())
         } else {
-            Err("无法到达目标地图".to_string())
+            Err(anyhow!("无法到达目标地图"))
         }
     }
 

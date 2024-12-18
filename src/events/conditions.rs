@@ -1,6 +1,5 @@
-use crate::player::Player;
-use crate::systems::map_system::MapSystem;
-use crate::systems::time_system::TimeSystem;
+use crate::player::{Player, PlayerAttribute, PlayerItem};
+use crate::systems::Systems;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -75,18 +74,31 @@ pub enum Condition {
     True,
 }
 
+pub type PlayerCond<'a> = (&'a PlayerItem, &'a PlayerAttribute);
+
+impl<'a> Into<PlayerCond<'a>> for &'a Player {
+    fn into(self) -> PlayerCond<'a> {
+        (&self.items,&self.attributes)
+    }
+}
+
+impl<'a> Into<PlayerCond<'a>> for &'a mut Player {
+    fn into(self) -> PlayerCond<'a> {
+        (&self.items,&self.attributes)
+    }
+}
+
 impl Condition {
     pub fn is_met(
         &self,
-        time_system: &TimeSystem,
-        map_system: &MapSystem,
+        systems: &Systems,
         player: &Player,
     ) -> bool {
         match self {
-            Condition::Time(cond) => time_system.check_condition(cond),
+            Condition::Time(cond) => systems.time.check_condition(player,cond),
             Condition::Location(cond) => cond
                 .locations
-                .contains(&map_system.get_current_location().to_string()),
+                .contains(&player.game_map),
             Condition::PlayerAttribute(cond) => {
                 for (attr, check) in &cond.attributes {
                     let value = *player.attributes.get(attr).unwrap();
@@ -122,13 +134,13 @@ impl Condition {
                 true
             },
             Condition::And(vec) => {
-                vec.conds.iter().all(|cond| cond.is_met(time_system, map_system, player))
+                vec.conds.iter().all(|cond| cond.is_met(systems,player))
             },
             Condition::Or(vec) => {
-                vec.conds.iter().any(|cond| cond.is_met(time_system, map_system, player))
+                vec.conds.iter().any(|cond| cond.is_met(systems,player))
             },
             Condition::Xor(vec) => {
-                vec.conds.iter().fold(false, |fold,cond| fold^cond.is_met(time_system, map_system, player))
+                vec.conds.iter().fold(false, |fold,cond| fold^cond.is_met(systems,player))
             },
             Condition::RandomCondition(prop) => {
                 rand::random::<f64>()  < *prop

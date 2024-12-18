@@ -1,9 +1,7 @@
 use crate::frontend::Frontend;
 use crate::game;
 use crate::player::Player;
-use crate::systems::asset_system::AssetSystem;
-use crate::systems::map_system::MapSystem;
-use crate::systems::time_system::TimeSystem;
+use crate::systems::Systems;
 use serde::Deserialize;
 
 use super::conditions::Condition;
@@ -64,9 +62,6 @@ pub struct EventData {
     #[serde(default)]
     pub condition: Condition, // 修改为 Condition
     pub segments: Vec<EventSegment>,
-
-    #[serde(default)]
-    pub stuck_moving: bool,
 }
 
 // 为 EventData 实现 Ord 和 PartialOrd，以便在 BinaryHeap 中按优先级排序
@@ -117,19 +112,16 @@ impl EventSystem {
 
 impl EventSystem {
     pub fn process_events(
-        &mut self,
-        mut current_event_and_segment: Option<(String, Option<String>)>,
+        &self,
         player: &mut Player,
-        time_system: &mut TimeSystem,
-        map_system: &mut MapSystem,
-        asset_system: &AssetSystem,
+        systems: &Systems,
         frontend: &mut Frontend,
     ) -> Result<Option<(String, Option<String>)>, game::GameErr> {
-        player.stuck_in_event = false;
-        let able_to_stuck;
+        // player.stuck_in_event = false;
+        // let able_to_stuck;
         // // 从优先级队列中取出优先级最高的事件
-        // if current_event_and_segment.is_none() {
-        //     current_event_and_segment = self
+        // if player.cur_evt_seg.is_none() {
+        //     player.cur_evt_seg = self
         //         .registered_events
         //         .pop()
         //         .map(|event| {
@@ -140,12 +132,11 @@ impl EventSystem {
         //         .unwrap_or(None);
         // }
 
-        let Some((event_name, segment_name)) = &mut current_event_and_segment else { return Ok(None);};
-        println!("{event_name}");
+        let Some((mut event_name, mut segment_name)) = player.cur_evt_seg.clone() else { return Ok(None);};
         // 获取当前事件数据
-        let Some(event) = self.events.get(event_name) else { return Ok(None);};
+        let Some(event) = self.events.get(&event_name) else { return Ok(None);};
         
-        able_to_stuck = event.stuck_moving;
+        // able_to_stuck = event.stuck_moving;
 
         // 获取段落: 如无指定，则发生第一个段落。
         let Some(segment) = segment_name
@@ -163,7 +154,7 @@ impl EventSystem {
             .options.iter().map(|opt| (
                 opt.text.clone(),             // 文本
                 !opt.condition.as_ref() // 与“没有条件或条件成立”
-                    .is_some_and(|c| !c.is_met(time_system, map_system, player))
+                    .is_some_and(|c| !c.is_met(systems,&player))
             )).collect();
 
         let selected_option = if segment.silent {
@@ -178,7 +169,7 @@ impl EventSystem {
         };
 
         // 应用属性修改
-        selected_option.modifier.modify(time_system, map_system, player);
+        selected_option.modifier.modify(systems,player)?;
         // if let Some(ref modifications) = selected_option.modifications {
         //     for (attr, value) in modifications {
         //         // player.modify_attribute(attr, *value);
@@ -210,16 +201,16 @@ impl EventSystem {
 
         if let Some(ref avatar_set) = selected_option.avatar_set {
             match avatar_set {
-                AvatarSet::Main(str) => frontend.cache.change_avatar(asset_system.avatar[str].clone()),
-                AvatarSet::Deco(str) => frontend.cache.add_avatar_deco(asset_system.avatar_deco[str].clone()),
-                AvatarSet::MainKeepingDeco(str) => frontend.cache.change_avatar_keeping_deco(asset_system.avatar[str].clone()),
+                AvatarSet::Main(str) => frontend.change_avatar(str),
+                AvatarSet::Deco(str) => frontend.add_avatar_deco(str),
+                AvatarSet::MainKeepingDeco(str) => frontend.change_avatar_keeping_deco(str),
             }
         }
 
         match (&selected_option.jump_to_event,&selected_option.jump_to) {
-            (None,None) => {current_event_and_segment = None;}
-            (Some(evt),seg) => { *event_name = evt.clone(); *segment_name = seg.clone();}
-            (None,Some(jump_to)) => {*segment_name = Some(jump_to.clone());}
+            (None,None) => {player.cur_evt_seg = None;}
+            (Some(evt),seg) => { event_name = evt.clone(); segment_name = seg.clone();}
+            (None,Some(jump_to)) => {segment_name = Some(jump_to.clone());}
         }
 
         // 跳转到指定段落
@@ -231,8 +222,8 @@ impl EventSystem {
             }
         }
 
-        player.stuck_in_event = current_event_and_segment.is_some() && able_to_stuck;
-        Ok(current_event_and_segment)
+        // player.stuck_in_event = player.cur_evt_seg.is_some() && able_to_stuck;
+        Ok(Some((event_name,segment_name)))
     }
 
     // fn should_trigger_event(&self, _event: &EventData, _player: &Player) -> bool {

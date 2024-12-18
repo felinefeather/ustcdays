@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, path::PathBuf, str::FromStr, sync::mpsc::{Receiver, Sender}
+    collections::HashMap, path::PathBuf, sync::mpsc::{Receiver, Sender}
 };
 
 use crate::{
@@ -7,14 +7,13 @@ use crate::{
         events::{EventData, EventSystem},
         triggers::{Trigger, TriggerSystem},
     },
-    frontend::{DebugFromFrontend, FromFrontend, Frontend, ToFrontend},
+    frontend::{assets::Assets, DebugFromFrontend, FromFrontend, Frontend, ToFrontend},
     player::{Attribute, Player},
     systems::{
-        asset_system::AssetSystem, map_system::{Map, MapSystem}, time_system::TimeSystem
+        map_system::{Map, MapSystem}, time_system::TimeSystem, Systems
     },
 };
 use anyhow::Result;
-use chrono::NaiveDateTime;
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -23,19 +22,14 @@ pub struct GameData {
     pub events: Vec<EventData>,
     pub player: Vec<Attribute>, // 修改为 Vec<Attribute>
     #[serde(default)]
-    pub assets: AssetSystem,
+    pub assets: Assets,
     #[serde(default)]
     pub trigger: Vec<HashMap<String,Trigger>>,
 }
 
 pub struct Game {
-    time_system: TimeSystem,
-    map_system: MapSystem,
-    asset_system: AssetSystem,
-    event_system: EventSystem,
+    systems: Systems,
     player: Player,
-    trigger_system: TriggerSystem,
-    current_event_and_segment: Option<(String, Option<String>)>,
 
     pub frontend: Frontend,
 }
@@ -90,8 +84,6 @@ impl Game {
     )-> Result<Self> {
         let mut ret = Self::new(source, frontend)?;
         ret.player = player_source.into_data()?;
-        ret.time_system.current_time = NaiveDateTime::from_str(&ret.player.game_time)?;
-        ret.map_system.current_location = ret.player.game_map.clone();
         Ok(ret)
     }
 
@@ -102,18 +94,20 @@ impl Game {
         let data = source.into_data()?;
 
         Ok(Game {
-            asset_system: data.assets,
-            time_system: TimeSystem::new(),
-            map_system: MapSystem::new(&data.maps),
-            event_system: EventSystem::new(&data.events),
+            systems: Systems { 
+                time: TimeSystem::new(), 
+                map: MapSystem::new(&data.maps),
+                trigger: TriggerSystem::new(&data.trigger), 
+                event: EventSystem::new(&data.events) 
+            },
+
             player: Player::new(&data.player),
-            trigger_system: TriggerSystem::new(&data.trigger),
-            current_event_and_segment: None,
 
             frontend: Frontend {
                 sender: frontend.0,
                 cache: ToFrontend::new(),
                 receiver: frontend.1,
+                assets: data.assets
             },
         })
     }
@@ -121,23 +115,17 @@ impl Game {
     pub fn main_loop(&mut self) -> Result<(),GameErr> {
         loop {
             let Self { 
-                player, time_system,map_system, 
-                trigger_system, event_system, current_event_and_segment,
-                asset_system, frontend 
+                systems, player, frontend 
             } = self;
 
             TriggerSystem::set_default(&mut player.trigger);
 
-            if let Some(evt) = trigger_system.pick_event_and_clear(
-                    player,&time_system,&map_system,
-                    &current_event_and_segment,event_system) {
-                *current_event_and_segment = Some((evt.clone(),None));
-            }
+            if let Some(evt) = systems.trigger.pick_event(&player, systems) {
+                player.cur_evt_seg = Some((evt.clone(),None));
+            } player.trigger.clear();
 
-            *current_event_and_segment = self.event_system.process_events(
-                std::mem::take(current_event_and_segment),
-                player,time_system,map_system,
-                &asset_system, frontend,
+            player.cur_evt_seg = systems.event.process_events(
+                player, systems, frontend,
             )?;
         }
     }
@@ -159,12 +147,18 @@ impl Game {
                             });
                         }
                         SetAttribute(str, val) => {
-                            if let Some(v) = self.player.attributes.get_mut(&str) {*v = val;}
+                            if let Some(v) = self.player.attributes.get_mut(&str) {
+                                *v = val;
+                            }
                         },
                         None => (),
                     }
                 }
                 GameErr::Error(error) => {
+                    if error.to_string().contains("SendError") {
+                        println!("Fronted disconnected");
+                        return;
+                    }
                     dbg!(error);
                 }
                 GameErr::Default => (),

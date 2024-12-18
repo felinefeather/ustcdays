@@ -4,8 +4,10 @@ use std::{
 };
 
 use crate::{
-    game::{DataSource, GameData, GameErr}, player::Attribute, systems::asset_system::ImageData
+    game::{DataSource, GameData, GameErr}, player::Attribute, frontend::assets::ImageData
 };
+
+use super::assets::Assets;
 
 // frontend.rs
 #[derive(Clone, Default, Debug)]
@@ -40,6 +42,7 @@ pub struct Frontend {
     pub receiver: Receiver<FromFrontend>,
     pub sender: Sender<ToFrontend>,
     pub cache: ToFrontend,
+    pub assets: Assets
 }
 
 #[derive(Clone, Default, Debug)]
@@ -90,6 +93,24 @@ impl Frontend {
             &options.iter().map(|s|(s.clone(),false)).collect::<Vec<_>>(),false);
         self.sender.send(self.cache.clone_and_clear())?;
         Ok(self.receiver.recv()?.into_choice()?)
+    }
+
+    pub fn change_avatar(&mut self, avatar: &String) {
+        self.cache.change_avatar(
+            self.assets.avatar[avatar].clone()
+        );
+    }
+
+    pub fn change_avatar_keeping_deco(&mut self, avatar: &String) {
+        self.cache.change_avatar_keeping_deco(
+            self.assets.avatar[avatar].clone()
+        );
+    }
+
+    pub fn add_avatar_deco(&mut self, deco: &String) {
+        self.cache.add_avatar_deco(
+            self.assets.avatar_deco[deco].clone()
+        );
     }
 }
 

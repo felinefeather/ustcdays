@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -25,12 +26,12 @@ pub struct Attribute {
 }
 
 #[derive(Serialize,Deserialize,Default)]
-pub struct CurrentAttribute {
+pub struct PlayerAttribute {
     pub val: Vec<(String,i32)>,
     // 这样的实现旨在节约内存——attributes作为直接给玩家看的属性，确实不需要太多条，如果不爽请修改成HashMap实现。
 }
 
-impl CurrentAttribute {
+impl PlayerAttribute {
     pub fn get_mut(&mut self,k: &str) -> Option<&mut i32> {
         Some(&mut self.val.iter_mut().filter(|(str,_)| str != k).next()?.1)
     }
@@ -59,22 +60,23 @@ impl CurrentAttribute {
     }
 }
 
+pub type PlayerItem = HashMap<String,(toml::Value,usize)>;
+
 #[derive(Serialize,Deserialize,Default)]
 pub struct Player {
-    pub attributes: CurrentAttribute,
+    pub attributes: PlayerAttribute,
     pub attribute_defs: HashMap<String, Attribute>,
 
-    pub items: HashMap<String,(toml::Value,usize)>,
-    pub game_time: String,
+    pub items: PlayerItem,
+    pub game_time: NaiveDateTime,
     pub game_map: String,
+    pub cur_evt_seg: Option<(String, Option<String>)>,
     pub trigger: HashSet<Trigger>,
-
-    pub stuck_in_event: bool,
 }
 
 impl Player {
     pub fn new(attribute: &Vec<Attribute>) -> Self {
-        let mut attributes = CurrentAttribute { val: vec![] };
+        let mut attributes = PlayerAttribute { val: vec![] };
         let mut defs_map = HashMap::new();
         for attr in attribute.iter() {
             attributes.val.push((attr.name.clone(),attr.default));
@@ -86,7 +88,7 @@ impl Player {
             attribute_defs: defs_map,
             items: HashMap::new(),
             game_time: chrono::NaiveDateTime::parse_from_str("2024-01-01 00:00", "%Y-%m-%d %H:%M")
-                .unwrap().to_string(),
+                .unwrap(),
             game_map: "Town".to_string(),
 
             trigger: {
@@ -94,7 +96,7 @@ impl Player {
                 trigger.insert(Trigger::Init);
                 trigger
             },
-            stuck_in_event: false,
+            cur_evt_seg: None,
         }
     }
 

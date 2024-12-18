@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 #[derive(Default,Deserialize,Clone,Debug)]
-pub struct AssetSystem {
+pub struct Assets {
     pub avatar: HashMap<String,ImageData>,
     #[serde(default)]
     pub avatar_deco: HashMap<String,ImageData>,
