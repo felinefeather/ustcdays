@@ -59,6 +59,7 @@ pub struct EventSegment {
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventData {
     pub name: String,
+    #[serde(default)]
     pub priority: u32,
     pub force: bool,
     #[serde(default)]
